@@ -38,5 +38,23 @@ function floatTo16BitPCM(float32) {
   return out.buffer;
 }
 
-
+let playCtx;
+function playChunk(arrayBuffer) {
+  if (!playCtx) playCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const pcm16 = new Int16Array(arrayBuffer);
+ 
+  // TODO #3 — convert Int16 back to Float32 (-1..1): the inverse of TODO #2
+  const float32 = new Float32Array(pcm16.length);
+  // for (let i = 0; i < pcm16.length; i++) { float32[i] = ...; }
+  for (let i = 0; i< pcm16.length; i++) {
+    float32[i] = pcm16[i] / 32768;
+  }
+ 
+  const buf = playCtx.createBuffer(1, float32.length, SAMPLE_RATE);
+  buf.copyToChannel(float32, 0);
+  const src = playCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(playCtx.destination);
+  src.start();   // simple back-to-back playback — good enough for an echo
+}
 </script>
