@@ -1,1 +1,6 @@
+cffi==2.1.0
+numpy==2.4.6
+pycparser==3.0
+python-dotenv==1.2.2
+sounddevice==0.5.5
 websockets==16.1
