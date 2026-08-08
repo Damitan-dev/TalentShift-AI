@@ -18,8 +18,8 @@ MIC_RATE = 24000
 SPK_RATE = 24000 #To know how fast the speaker should play back the audio from the OPENAI, commonly OpenAI realtime voices are commonly generated around 24kHz PCM 
 CHUNK_MS = 40 # That means 40 milliseconds of the audio would be sent as chunks
 play_q = asyncio.Queue() #This is where audio waits until the speaker is ready to play it
-
-
+CHUNK_BYTES = 960 # 20ms at 24kHz, PCM16, mono
+fade_requested = asyncio.Event()
 
 INSTRUCTIONS = INSTRUCTIONS = """
 # ROLE
@@ -86,6 +86,10 @@ or like a customer-service agent.
 Use natural spoken English and contractions when appropriate.
 
 Never use spoken lists unless absolutely necessary.
+
+Speak with a calm, low-energy warmth.
+Your voice should feel gentle and composed, never forceful.
+Use smooth phrasing and slightly slower pacing.
 
 
 # VERBOSITY
@@ -257,6 +261,24 @@ Then ask one interview question.
 
 Do not lecture them about being off-topic.
 
+#INTERRUPTIONS AND CLARIFICATION
+
+If the candidate interrupts while you are speaking:
+
+- If they begin answering the question, stop speaking and listen.
+  Do not repeat the interrupted question unnecessarily.
+
+- If they ask you to repeat the question, repeat the full question
+  briefly and clearly.
+
+- If they say they did not understand the question, rephrase it
+  without giving hints or suggesting an answer.
+
+- If they ask a clarification about the question, answer only enough
+  to clarify what is being asked, then return to the same question.
+
+- Do not treat requests for repetition, clarification, or technical
+  issues as interview answers.
 
 # CLOSING
 
@@ -335,7 +357,7 @@ async def main():
                             "rate": MIC_RATE
                         },
                         "noise_reduction": {
-                            "type": "far_field"
+                            "type": "near_field"
                         },
                         "turn_detection": {
                                             "type": "server_vad",
@@ -395,7 +417,65 @@ async def send_mic(ws): #To continuously send microphone chunks to OpenAI
 
 
 
- 
+
+
+def soft_fade_out(chunk):
+    samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
+
+    n = len(samples)
+    #First half: gently duck from 100% → 35%
+    first_half = np.linspace(1.0, 0.35, n//2)
+
+    #Second half : fade from 35% to silence
+    second_half = np.linspace(0.35, 0.0, n-n // 2)
+
+    envelope = np.concatenate((first_half, second_half))
+
+    samples *= envelope
+
+    return samples.astype(np.int16).tobytes()
+
+
+
+
+    
+# For the from queue  to speaker
+async def player(speaker):  #To get it from the queue and play it
+    while True:
+        chunk = await play_q.get()
+
+        if fade_requested.is_set():
+            faded_chunk = soft_fade_out(chunk)
+
+            await asyncio.to_thread(
+            speaker.write,
+            faded_chunk
+            )
+
+            #Remove everything Alex still had waiting to say
+            flush_playback()
+            fade_requested.clear()
+            continue
+        
+        await asyncio.to_thread(
+                    speaker.write,
+                    chunk
+                    )
+        
+
+
+#For flushing the queue when the candidate speak when the A.I is speaking
+def flush_playback():
+    while True:
+
+        try:
+            play_q.get_nowait()
+
+        except asyncio.QueueEmpty:
+            break
+
+
+
 
 
 ai_speaking = False
@@ -403,9 +483,10 @@ ai_speaking = False
 async def receive(ws): #For receiving everything the AI sends back
     speaker = sd.RawOutputStream(samplerate=SPK_RATE, channels=1, dtype="int16")#creates speaker output stream and OPENAI returns audio in PCM16 that is why it is int16
     speaker.start()#Telling the operating system it is ready to play audio
+    asyncio.create_task(player(speaker))
    
     interview_started = False
-
+    interrupted = False
     async for raw in ws: #waiting for messages from the websocket
         event = json.loads(raw) #convert the json text into python dictionary
         etype = event.get("type", "") # saving the event type into a variable called etype
@@ -417,21 +498,31 @@ async def receive(ws): #For receiving everything the AI sends back
                 "type": "response.create"
             }
             await ws.send(json.dumps(start_event))
-
+       
         elif etype == "response.output_audio.delta":
             ai_speaking = True
             audio_b64 = event["delta"] # to get the Base64 string
-            audio_bytes = base64.b64decode(audio_b64) # Convert base 64 back into PCM16 bytes
-            
-            speaker.write(audio_bytes) #play those bytes
+            if not interrupted:
+                audio_bytes = base64.b64decode(audio_b64) # Convert base 64 back into PCM16 bytes
+
+            for i in range(0, len(audio_bytes), CHUNK_BYTES):
+                play_q.put_nowait(audio_bytes[i:i + CHUNK_BYTES])#Places each chunk received into the queue
+            # speaker.write(audio_bytes) #play those bytes
             # print("playing", len(audio_bytes), "bytes")
         
 
-       
-
-        elif "speech_started" in etype:
+        elif etype == "input_audio_buffer.speech_started" :
             print("\r🎤 you're talking…", end="")
+            
+                
+            interrupted = True
 
+            fade_requested.set()
+            print("\n✋ Alex yielding")
+
+
+        elif etype == "response.created":
+            interrupted = False
         elif etype == "response.done":
             ai_speaking = False
             print("\r🤖 interviewer finished. Your turn.")
