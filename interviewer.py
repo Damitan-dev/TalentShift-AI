@@ -31,9 +31,21 @@ BASE_DIR = Path(__file__).resolve().parent
 
 # Build the path to Alex's instruction file.
 PROMPT_FILE = BASE_DIR / "prompts" / "interviewer_prompt.txt"
-# Open the prompt file and load all of Alex's instructions into Python.
-INSTRUCTIONS = PROMPT_FILE.read_text(
+
+# The language selected for this interview session.
+LANGUAGE = "Yoruba"
+
+
+# Read Alex's instruction template from the prompt file.
+prompt_template = PROMPT_FILE.read_text(
     encoding="utf-8"
+)
+
+
+# Replace {LANGUAGE} in the prompt with the language selected for this session.
+INSTRUCTIONS = prompt_template.replace(
+    "{LANGUAGE}",
+    LANGUAGE
 )
 
 async def main():
