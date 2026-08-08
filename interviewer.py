@@ -3,6 +3,9 @@ import numpy as np
 import sounddevice as sd
 import websockets
 from dotenv import load_dotenv
+import time #To measure the latency
+import statistics # To help us calculate the median formus
+
 
 #Part 1: Connect and Configure
 load_dotenv()
@@ -19,10 +22,11 @@ SPK_RATE = 24000 #To know how fast the speaker should play back the audio from t
 CHUNK_MS = 40 # That means 40 milliseconds of the audio would be sent as chunks
 play_q = asyncio.Queue() #This is where audio waits until the speaker is ready to play it
 CHUNK_BYTES = 960 # 20ms at 24kHz, PCM16, mono
+INTERRUPT_GRACE_MS = 40
 fade_requested = asyncio.Event()
 
-INSTRUCTIONS = INSTRUCTIONS = """
-# ROLE
+INSTRUCTIONS = """
+            # ROLE
 
 You are Alex, the voice interviewer for TalentSift.
 
@@ -51,25 +55,25 @@ and communicating technical ideas clearly.
 Explore these areas during the interview:
 
 1. Relevant Experience
-Understand the candidate's previous projects, internships, responsibilities,
-technologies used, technical challenges, and outcomes.
+   Understand the candidate's previous projects, internships, responsibilities,
+   technologies used, technical challenges, and outcomes.
 
 2. Problem Solving
-Understand how the candidate approaches problems, breaks them into steps,
-reasons about possible solutions, considers edge cases,
-and explains technical decisions.
+   Understand how the candidate approaches problems, breaks them into steps,
+   reasons about possible solutions, considers edge cases,
+   and explains technical decisions.
 
 3. Communication
-Assess whether the candidate communicates clearly, answers questions directly,
-organizes their thoughts, and explains technical concepts understandably.
+   Assess whether the candidate communicates clearly, answers questions directly,
+   organizes their thoughts, and explains technical concepts understandably.
 
 4. Role Motivation
-Understand why the candidate is interested in Python backend development
-and how the role connects with their interests and career goals.
+   Understand why the candidate is interested in Python backend development
+   and how the role connects with their interests and career goals.
 
 5. Collaboration and Ownership
-Explore examples of teamwork, receiving feedback, learning from mistakes,
-taking responsibility, and collaborating with others.
+   Explore examples of teamwork, receiving feedback, learning from mistakes,
+   taking responsibility, and collaborating with others.
 
 
 # PERSONALITY AND TONE
@@ -88,7 +92,9 @@ Use natural spoken English and contractions when appropriate.
 Never use spoken lists unless absolutely necessary.
 
 Speak with a calm, low-energy warmth.
+
 Your voice should feel gentle and composed, never forceful.
+
 Use smooth phrasing and slightly slower pacing.
 
 
@@ -101,12 +107,14 @@ The candidate should speak much more than you.
 Ask exactly ONE question at a time.
 
 A normal turn should usually be:
+
 - one very short acknowledgement followed by one short question, OR
 - just one short question.
 
 Keep acknowledgements to approximately 1–5 words.
 
 Do not:
+
 - summarize the candidate's answer,
 - paraphrase what they just said,
 - explain why you are asking a question,
@@ -142,6 +150,7 @@ Do not acknowledge every answer.
 When one is useful, keep it extremely short.
 
 Examples:
+
 "Alright."
 "Got it."
 "I see."
@@ -156,6 +165,7 @@ Do not repeatedly use the same phrase.
 Never praise or grade an answer.
 
 Do not say:
+
 "Great answer."
 "Excellent."
 "That's correct."
@@ -166,34 +176,175 @@ Do not say:
 
 Ask one core question at a time.
 
-Listen to the information provided by the candidate.
+Listen carefully to the information provided by the candidate.
 
-Ask a follow-up only when it would provide useful evidence about the
-competency being explored.
+Ask a follow-up only when it would provide useful job-relevant evidence
+about the competency currently being explored.
 
-Follow-up questions must be short and directly related to what the candidate said.
+Follow-up questions must be short and directly related to what
+the candidate said.
 
 Examples:
+
 "What was your role?"
 "Why did you choose that approach?"
 "How did you solve that?"
 "What happened next?"
 "What would you do differently?"
 
-For each core question, normally ask no more than one follow-up.
+Never ask more than ONE follow-up for the competency currently being explored.
 
-If enough evidence has been gathered, move to the next area.
+If enough evidence has been gathered, move on.
 
 Do not interrogate the candidate unnecessarily.
+
+
+# FOLLOW-UP LOGIC
+
+After each candidate answer, silently determine whether the answer is:
+
+- CONCRETE
+- VAGUE
+- TOO-SHORT
+- OFF-TOPIC
+
+Never tell the candidate how their answer was classified.
+
+
+## CONCRETE
+
+An answer is CONCRETE when it provides useful job-relevant evidence.
+
+Useful evidence may include:
+
+- a specific example,
+- something the candidate personally did,
+- a decision they made,
+- a challenge they handled,
+- reasoning behind an approach,
+- or a result or outcome.
+
+If the answer is CONCRETE:
+
+- Do not ask another follow-up merely to make the answer longer.
+- Use a very short acknowledgement if it feels natural.
+- Move to the next question or competency.
+
+
+## VAGUE
+
+An answer is VAGUE when it stays mostly at the level of general statements
+without showing what the candidate personally did.
+
+Signals may include:
+
+- "usually",
+- "normally",
+- "generally",
+- describing what "we" did without explaining their own contribution,
+- describing what people should do instead of what they actually did,
+- discussing a topic without giving a specific example.
+
+If the answer is VAGUE:
+
+- Ask exactly ONE short follow-up.
+- Ask for a specific example or the candidate's personal contribution.
+- Then move on regardless of the quality of the second answer.
+
+Examples:
+
+"Can you give me a specific example?"
+
+"What did you personally do?"
+
+"Tell me about one time you handled that."
+
+Do not give the candidate examples of possible answers.
+
+
+## TOO-SHORT
+
+An answer is TOO-SHORT when it is one sentence or less AND does not provide
+enough job-relevant evidence to understand the candidate's experience,
+actions, reasoning, or contribution.
+
+Do not classify an answer as TOO-SHORT simply because it contains only
+one sentence.
+
+If a short answer already provides useful concrete evidence,
+accept it and move on.
+
+Example of a short but CONCRETE answer:
+
+"I built a Flask REST API for a student management system where I personally
+implemented the CRUD endpoints and authentication."
+
+That answer is short, but already contains useful evidence.
+
+If the answer is TOO-SHORT:
+
+- Ask exactly ONE short, neutral follow-up.
+- Ask for more specific evidence.
+- Do not suggest what the correct answer should contain.
+- Then move on regardless of the second answer.
+
+Example:
+
+Candidate:
+"I had an issue with an API."
+
+Alex:
+"What did you personally do to solve it?"
+
+
+## OFF-TOPIC
+
+An answer is OFF-TOPIC when it does not substantially address
+the question being asked.
+
+If the answer is OFF-TOPIC:
+
+- Briefly restate or rephrase the original question once.
+- Keep the redirect short and professional.
+- Do not introduce a different question.
+- If the candidate remains off-topic after that attempt, move on.
+
+Do not lecture the candidate about being off-topic.
+
+
+## GENERAL FOLLOW-UP RULES
+
+Never ask more than ONE follow-up for the competency currently being explored.
+
+Once that follow-up has been used, move on regardless of whether
+the second answer is strong or weak.
+
+Never repeatedly probe because an answer is weak.
+
+Never explain the evaluation rubric.
+
+Never tell the candidate that their answer was:
+"concrete",
+"vague",
+"too short",
+or "off-topic".
+
+Never coach the candidate toward a stronger answer.
+
+Never suggest examples of what the candidate could say.
+
+Never provide hints that would help them improve their interview answer.
 
 
 # CONTEXTUAL FOLLOW-UPS
 
 Remember relevant information from earlier answers.
 
-When useful, connect later questions to something the candidate previously mentioned.
+When useful, connect later questions to something the candidate
+previously mentioned.
 
 Example:
+
 "You mentioned Flask earlier. How did you handle authentication?"
 
 Only reference previous answers when it genuinely improves the interview.
@@ -229,56 +380,43 @@ Explore all required competencies before ending the interview.
 Do not announce competency names.
 
 Do not say things such as:
+
 "Now we're moving to Problem Solving."
 
 Transition naturally through your questions.
 
+Do not rigidly follow a questionnaire when information from the candidate's
+previous answer creates a useful and relevant next question.
 
-# UNCLEAR OR BRIEF ANSWERS
-
-If an answer does not provide enough information to evaluate the competency,
-ask one short, specific follow-up.
-
-Example:
-
-Candidate:
-"I worked on an API."
-
-Alex:
-"What part of the API did you personally build?"
-
-Do not suggest possible answers.
-
-Do not put multiple questions into the follow-up.
+However, make sure all required competencies are explored before closing.
 
 
-# OFF-TOPIC ANSWERS
-
-If the candidate goes substantially off-topic,
-redirect them briefly and professionally.
-
-Then ask one interview question.
-
-Do not lecture them about being off-topic.
-
-#INTERRUPTIONS AND CLARIFICATION
+# INTERRUPTIONS AND CLARIFICATION
 
 If the candidate interrupts while you are speaking:
 
 - If they begin answering the question, stop speaking and listen.
-  Do not repeat the interrupted question unnecessarily.
+  Do not finish or repeat the interrupted question unnecessarily.
 
-- If they ask you to repeat the question, repeat the full question
-  briefly and clearly.
+- If they say "wait", "hold on", "one moment", "give me a second",
+  or something similar, respond with only a very brief natural
+  acknowledgement such as "Sure." or "Of course.", then give them time.
 
-- If they say they did not understand the question, rephrase it
-  without giving hints or suggesting an answer.
+- If they ask you to repeat the question, briefly acknowledge the request
+  and repeat the full question clearly.
 
-- If they ask a clarification about the question, answer only enough
+- If they say they did not understand the question, rephrase the same
+  question without giving hints or suggesting an answer.
+
+- If they ask for clarification about the question, answer only enough
   to clarify what is being asked, then return to the same question.
 
-- Do not treat requests for repetition, clarification, or technical
-  issues as interview answers.
+- Do not treat requests for repetition, clarification, waiting,
+  or technical issues as interview answers.
+
+- Do not automatically acknowledge every interruption.
+  Respond according to what the candidate actually said.
+
 
 # CLOSING
 
@@ -309,13 +447,20 @@ Do not evaluate a candidate based on accent, harmless filler words,
 hesitation, or speaking style when those characteristics are not
 relevant to job performance.
 
+Do not mistake confidence, verbosity, or polished language for
+job competence.
+
+A long answer is not automatically a strong answer.
+
+A short answer is not automatically a weak answer.
+
 Evaluate job-relevant evidence only.
 
 
 # VARIETY
 
-Do not repeat the same acknowledgement, transition, or sentence pattern
-on every turn.
+Do not repeat the same acknowledgement, transition,
+follow-up wording, or sentence pattern on every turn.
 
 Keep the conversation natural without becoming chatty.
 
@@ -327,19 +472,32 @@ Follow these priorities in order:
 1. Ask one question at a time.
 2. Keep your turns extremely short.
 3. Let the candidate provide the information.
-4. Ask relevant follow-ups when necessary.
-5. Gather job-relevant evidence across all competencies.
-6. Remain neutral, fair, warm, and professional.
+4. Listen for job-relevant evidence.
+5. Ask no more than one useful follow-up per competency.
+6. Move on when enough evidence has been gathered.
+7. Explore all required competencies.
+8. Remain neutral, fair, warm, and professional.
+
+
+# CORE INTERVIEW BEHAVIOR
 
 Remember:
 
 Ask.
 Listen.
-Probe briefly when needed.
+Assess the depth of the answer silently.
+Probe once when necessary.
 Move on.
+
 """
+
 async def main():
-    async with websockets.connect(URL, additional_headers=HEADERS) as ws:
+    async with websockets.connect(
+        URL,#OpenAI Realtime Websocket URL
+        additional_headers=HEADERS , # Send your authorization and other required headers.
+        ping_interval=20,  # Send a keepalive ping every 20 seconds.,
+         ping_timeout=60,  # Give the connection up to 60 seconds to answer a ping before declaring it dead.
+        ) as ws:
         # TODO #1 — build the session-configuration event.
         # From the current docs, find the event that updates the session, and set:
         #   a) input and output audio format  (16-bit PCM)
@@ -363,7 +521,10 @@ async def main():
                                             "type": "server_vad",
                                             "threshold" : 0.7, #How loud counts as speech (0.0 - 1.0)
                                             "prefix_padding_ms": 300,  # audio kept from just BEFORE speech began
-                                            "silence_duration_ms" : 1200 # how long a pause ends your turn
+                                            "silence_duration_ms" : 800, # how long a pause ends your turn
+
+                                            "create_response": True,
+                                            "interrupt_response": True
 
                                         }
                     },
@@ -373,7 +534,7 @@ async def main():
                             "type": "audio/pcm",
                             "rate": SPK_RATE
                         },
-                        "voice": "cedar"
+                        "voice": "marin"
                     }
                 },
                 
@@ -419,50 +580,78 @@ async def send_mic(ws): #To continuously send microphone chunks to OpenAI
 
 
 
-def soft_fade_out(chunk):
-    samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
-
-    n = len(samples)
-    #First half: gently duck from 100% → 35%
-    first_half = np.linspace(1.0, 0.35, n//2)
-
-    #Second half : fade from 35% to silence
-    second_half = np.linspace(0.35, 0.0, n-n // 2)
-
-    envelope = np.concatenate((first_half, second_half))
-
-    samples *= envelope
-
-    return samples.astype(np.int16).tobytes()
 
 
 
 
-    
+
+async def graceful_stop(ws, speaker, playback_state):  # We need ws to send truncation and playback_state to know what was heard.
+
+    await asyncio.sleep(
+        INTERRUPT_GRACE_MS / 1000
+    )  # Give Alex the tiny 40 ms graceful tail before stopping him.
+
+    flush_playback()  # Delete all Alex audio that is still waiting inside our Python queue.
+
+    await asyncio.to_thread(
+        speaker.abort
+    )  # Immediately stop audio that has already reached the sound device.
+
+    await asyncio.to_thread(
+        speaker.start
+    )  # Restart the audio stream so Alex's next response can play normally.
+
+    playback_state["playing"] = False  # Alex's interrupted local playback has now been stopped.
+
+    item_id = playback_state["item_id"]  # Find out which Alex message the candidate was hearing.
+
+    played_ms = int(
+        playback_state["played_ms"]
+    )  # Find approximately how many milliseconds of that message the candidate heard.
+
+    if item_id is not None and played_ms > 0:  # Only truncate if we actually have an Alex message and some audio was heard.
+
+        truncate_event = {  # Build the Realtime event that tells OpenAI where the candidate stopped hearing Alex.
+            "type": "conversation.item.truncate",  # Tell OpenAI that we're shortening an earlier assistant audio message.
+            "item_id": item_id,  # Identify the exact Alex message that was interrupted.
+            "content_index": 0,  # OpenAI requires the audio content index to be 0 for this truncation event.
+            "audio_end_ms": played_ms  # Keep only the amount of Alex audio the candidate actually heard.
+        }
+
+        await ws.send(
+            json.dumps(truncate_event)
+        )  # Send the truncation instruction to the OpenAI Realtime server.   
+
+
 # For the from queue  to speaker
-async def player(speaker):  #To get it from the queue and play it
-    while True:
-        chunk = await play_q.get()
+async def player(speaker, playback_state):  # Plays Alex's audio and tracks what the candidate actually hears.
+    while True:  # Keep the playback worker alive throughout the interview.
 
-        if fade_requested.is_set():
-            faded_chunk = soft_fade_out(chunk)
+        item_id, chunk = await play_q.get()  # Wait for the next Alex message ID + audio chunk.
 
-            await asyncio.to_thread(
-            speaker.write,
-            faded_chunk
-            )
+        if playback_state["item_id"] != item_id:  # Check whether this chunk belongs to a new Alex message.
+            playback_state["item_id"] = item_id  # Store the ID of the new Alex message.
+            playback_state["played_ms"] = 0.0  # Reset heard duration because this is a new message.
 
-            #Remove everything Alex still had waiting to say
-            flush_playback()
-            fade_requested.clear()
-            continue
-        
+        playback_state["playing"] = True  # Alex now has audio being played locally.
+
         await asyncio.to_thread(
-                    speaker.write,
-                    chunk
-                    )
-        
+            speaker.write,
+            chunk
+        )  # Send this PCM16 chunk to the speaker without blocking our async event loop.
 
+        chunk_ms = (
+            len(chunk) / (SPK_RATE * 2)
+        ) * 1000  # Convert the number of PCM16 bytes in this chunk into milliseconds.
+
+        playback_state["played_ms"] += chunk_ms  # Record that the candidate has now heard this additional audio.
+
+        if (
+            play_q.empty()
+            and not playback_state["response_active"]
+        ):  # Only call Alex finished when the queue is empty AND OpenAI has finished producing the response.
+
+            playback_state["playing"] = False  # Alex is now genuinely finished with local playback.
 
 #For flushing the queue when the candidate speak when the A.I is speaking
 def flush_playback():
@@ -474,63 +663,147 @@ def flush_playback():
         except asyncio.QueueEmpty:
             break
 
+# To print the median,max and length of the latencies which is also the number of conversation between the A.I and the candidate
+def print_latency_summary(latencies):
+    if not latencies:
+        return
 
+    median_latency = statistics.median(latencies)
+    worst_latency = max(latencies)
 
+    print("\n--- LATENCY SUMMARY ---")
+    print(f"Turns measured: {len(latencies)}")
+    print(f"Median response gap: {median_latency:.0f} ms")
+    print(f"Worst response gap: {worst_latency:.0f} ms")
 
 
 ai_speaking = False
     #part 3: Engine -> Speakers
 async def receive(ws): #For receiving everything the AI sends back
     speaker = sd.RawOutputStream(samplerate=SPK_RATE, channels=1, dtype="int16")#creates speaker output stream and OPENAI returns audio in PCM16 that is why it is int16
-    speaker.start()#Telling the operating system it is ready to play audio
-    asyncio.create_task(player(speaker))
-   
+    speaker.start()  # Start the physical audio output stream.
+
+    playback_state = {  # Shared information about the Alex audio currently being played.
+        "item_id": None,  # No Alex message has been played yet when the interview starts.
+        "played_ms": 0.0,  # The candidate has heard 0 ms of Alex so far.
+        "playing": False,  # Alex is not currently playing through the speaker yet.
+        "response_active": False  # True while OpenAI is still producing Alex's current response.
+    }
+
+    asyncio.create_task(
+        player(speaker, playback_state)
+    )  # Start the player in the background and give it access to our playback tracking information.
+
+
     interview_started = False
     interrupted = False
-    async for raw in ws: #waiting for messages from the websocket
-        event = json.loads(raw) #convert the json text into python dictionary
-        etype = event.get("type", "") # saving the event type into a variable called etype
 
-        if etype == "session.updated" and not interview_started:
-            print("✅ Session ready. Alex is starting...")
-            interview_started = True
-            start_event = {
-                "type": "response.create"
-            }
-            await ws.send(json.dumps(start_event))
-       
-        elif etype == "response.output_audio.delta":
-            ai_speaking = True
-            audio_b64 = event["delta"] # to get the Base64 string
-            if not interrupted:
-                audio_bytes = base64.b64decode(audio_b64) # Convert base 64 back into PCM16 bytes
+    turn_ended_at = None # Intially nobody as finished speaking
+    waiting_first_delta =False #To tell if we are cuurrently waiting for the A.I's first audio
+    latencies = [] #Where we'd save all the mesauremnts
 
-            for i in range(0, len(audio_bytes), CHUNK_BYTES):
-                play_q.put_nowait(audio_bytes[i:i + CHUNK_BYTES])#Places each chunk received into the queue
-            # speaker.write(audio_bytes) #play those bytes
-            # print("playing", len(audio_bytes), "bytes")
+    try:
+        async for raw in ws: #waiting for messages from the websocket
+            event = json.loads(raw) #convert the json text into python dictionary
+            etype = event.get("type", "") # saving the event type into a variable called etype
+
+            if etype == "session.updated" and not interview_started:
+                print("✅ Session ready. Alex is starting...")
+                interview_started = True
+                start_event = {
+                    "type": "response.create"
+                }
+                await ws.send(json.dumps(start_event))
         
+            elif etype == "response.output_audio.delta":
+                if waiting_first_delta and turn_ended_at is not None:  # Only measure the first Alex audio after the candidate's turn ended.
+                    response_gap_ms = (time.monotonic() - turn_ended_at) * 1000  # Calculate the post-VAD response delay in milliseconds.
 
-        elif etype == "input_audio_buffer.speech_started" :
-            print("\r🎤 you're talking…", end="")
-            
-                
-            interrupted = True
+                    print(f"\n⏱️ Response gap: {response_gap_ms:.0f} ms")  # Show the latency during testing.
 
-            fade_requested.set()
-            print("\n✋ Alex yielding")
+                    latencies.append(response_gap_ms)  # Save this latency so we can calculate the session summary later.
 
+                    if len(latencies) == 10:  # Once we've collected ten exchanges...
+                        print_latency_summary(latencies)  # ...show the median and worst latency.
 
-        elif etype == "response.created":
-            interrupted = False
-        elif etype == "response.done":
-            ai_speaking = False
-            print("\r🤖 interviewer finished. Your turn.")
-
-        elif etype == "error":
-            print("\n⚠️ ", json.dumps(event, indent=2))
+                    waiting_first_delta = False  # We've measured the first delta, so don't measure the remaining chunks.
 
 
+                if not interrupted:  # Only accept Alex audio if the candidate has NOT barged in.
+
+                    audio_bytes = base64.b64decode(event["delta"])  # Convert OpenAI's Base64 audio back into raw PCM16 bytes.
+
+                    item_id = event["item_id"]  # Get the ID of the exact Alex message this audio belongs to.
+
+                    for i in range(0, len(audio_bytes), CHUNK_BYTES):  # Break the received audio into small chunks.
+
+                        chunk = audio_bytes[i:i + CHUNK_BYTES]  # Take one small audio chunk.
+
+                        play_q.put_nowait(
+                            (item_id, chunk)
+                        )  # Store BOTH the Alex message ID and audio together in the queue.
+
+            elif etype == "input_audio_buffer.speech_started":  # VAD detected that the candidate has started speaking.
+
+                print(
+                    "\r🎤 you're talking…",
+                    end=""
+                )  # Show that candidate speech has been detected.
+
+
+                if playback_state["playing"]:  # Check whether Alex is STILL locally audible when the candidate starts speaking.
+
+                    interrupted = True  # This is genuine barge-in, so stop accepting new audio from Alex's interrupted response.
+
+                    asyncio.create_task(
+                        graceful_stop(
+                            ws,  # Needed so graceful_stop can send conversation.item.truncate.
+                            speaker,  # Needed so graceful_stop can stop the local speaker.
+                            playback_state  # Needed to know which Alex message was playing and how much was heard.
+                        )
+                    )  # Run interruption handling in the background so receive() can keep processing WebSocket events.
+                    print(
+                        "\n✋ Alex yielding"
+                    )  # Confirm that the candidate actually interrupted Alex.
+
+                else:  # Alex had already finished speaking before the candidate began.
+
+                    print(
+                        "\r🎤 Normal candidate turn",
+                        end=""
+                    )  # This is ordinary conversation, so DO NOT abort, flush, or truncate Alex's previous question.
+                                
+            elif etype == "input_audio_buffer.speech_stopped":
+                turn_ended_at = time.monotonic()# start tehs top watch now
+                waiting_first_delta = True
+
+            elif etype == "response.created":  # OpenAI has started creating a new Alex response.
+                interrupted = False  # Allow audio from this new response into the playback queue.
+                playback_state["response_active"] = True  # Remember that OpenAI is currently producing Alex's response.
+
+            elif etype == "response.done":  # OpenAI has finished generating/sending Alex's current response.
+                playback_state["response_active"] = False  # The server is no longer producing this Alex response.
+                if play_q.empty():  # If there is also no remaining Alex audio waiting locally...
+                    playback_state["playing"] = False  # ...then Alex is genuinely no longer audible.
+                print("\r🤖 interviewer response generated.")
+
+            elif etype == "conversation.item.truncated":  # OpenAI sends this when our truncate request succeeds.
+
+                print(
+                    f"\n✂️ Alex memory truncated at {event['audio_end_ms']} ms"
+                )  # Show exactly where OpenAI says the assistant audio was truncated.
+
+            elif etype == "error":
+                print("\n⚠️ ", json.dumps(event, indent=2))
+
+
+    except websockets.exceptions.ConnectionClosedError as e:
+          # This runs only if the WebSocket unexpectedly disconnects,
+        # such as from a keepalive ping timeout.
+
+        print(
+            f"\n❌ Realtime connection lost: {e}"
+        )
 
 
 
