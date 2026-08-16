@@ -10,7 +10,7 @@ from pathlib import Path  # Helps us build a reliable path to the prompt file.
 #Part 1: Connect and Configure
 load_dotenv()
 
-API_KEY = os.environ["OPENAI_API_KEY_MINE"]
+API_KEY = os.environ["OPENAI_API_KEY"]
 
 URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1" #Tells the websocket where to connect to
 HEADERS = {"Authorization" : f"Bearer {API_KEY}"} #For authorization via the API key if valid
@@ -33,7 +33,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PROMPT_FILE = BASE_DIR / "prompts" / "interviewer_prompt.txt"
 
 # The language selected for this interview session.
-LANGUAGE = "Yoruba"
+LANGUAGE = "French"
 
 
 # Read Alex's instruction template from the prompt file.
@@ -67,12 +67,13 @@ async def main():
                 "type" : "realtime",
                 "audio": {
                     "input": {
+                        # MY exisiting microphone audio format
                         "format": {
                             "type": "audio/pcm",
                             "rate": MIC_RATE
                         },
                         "noise_reduction": {
-                            "type": "near_field"
+                            "type": "far_field"
                         },
                         "turn_detection": {
                                             "type": "server_vad",
