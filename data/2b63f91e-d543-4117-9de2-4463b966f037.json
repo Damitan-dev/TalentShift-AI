@@ -1,0 +1,60 @@
+{
+  "id": "2b63f91e-d543-4117-9de2-4463b966f037",
+  "job_id": "junior-python-backend",
+  "candidate_id": "candidate-demo-001",
+  "status": "in_progress",
+  "language": "English",
+  "consent_given": true,
+  "started_at": "2026-08-16T18:38:31.655676Z",
+  "ended_at": null,
+  "transcript": [
+    {
+      "speaker": "interviewer",
+      "text": "Hi, I’m Alex from TalentSift. This interview will be recorded and evaluated. Are you ready to begin?",
+      "timestamp": "2026-08-16T18:38:34.118584Z",
+      "item_id": "item_EDa2bbSGYkxc93e5p3xxU"
+    },
+    {
+      "speaker": "candidate",
+      "text": "I'd",
+      "timestamp": "2026-08-16T18:38:36.470140Z",
+      "item_id": "item_EDa2dL7CQLGNemmQmIak0"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Hi, I’m Alex from TalentSift. This interview will be recorded and evaluated. Are you ready to begin?",
+      "timestamp": "2026-08-16T18:38:37.553146Z",
+      "item_id": "item_EDa2fF0UPlt2eliZrHV5M"
+    },
+    {
+      "speaker": "candidate",
+      "text": "for tell",
+      "timestamp": "2026-08-16T18:38:40.032927Z",
+      "item_id": "item_EDa2hyHzFkBDacNhx5AHj"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Hi, I’m Alex from TalentSift. This interview will be recorded and evaluated. Are you ready to begin?",
+      "timestamp": "2026-08-16T18:38:41.148660Z",
+      "item_id": "item_EDa2j72VcWl3Nau8j10gM"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Okay.",
+      "timestamp": "2026-08-16T18:38:43.266275Z",
+      "item_id": "item_EDa2krwbdLqHqTrTPARP5"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "I’m Alex from TalentSift. This interview will be recorded and evaluated. Are you ready to begin?",
+      "timestamp": "2026-08-16T18:38:44.433376Z",
+      "item_id": "item_EDa2mLh1x3VzTHUMj7svj"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Right,",
+      "timestamp": "2026-08-16T18:38:46.919045Z",
+      "item_id": "item_EDa2oJqV8XeWPolfVMEPr"
+    }
+  ]
+}

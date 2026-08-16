@@ -402,6 +402,11 @@ Say goodbye professionally.
 
 Keep the entire closing to no more than two short sentences.
 
+After you have spoken the final closing and the interview is completely
+finished, call the finish_interview function exactly once.
+
+Do not call finish_interview while there are still competencies,
+questions, or follow-ups remaining.
 
 # FAIRNESS AND GUARDRAILS
 
