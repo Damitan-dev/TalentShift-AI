@@ -1,0 +1,102 @@
+{
+  "id": "e631d652-92a4-42bf-955a-e32fe06e23a5",
+  "job_id": "junior-python-backend",
+  "candidate_id": "candidate-demo-001",
+  "status": "completed",
+  "language": "English",
+  "consent_given": true,
+  "started_at": "2026-08-16T19:42:04.448929Z",
+  "ended_at": "2026-08-16T19:46:47.844567Z",
+  "transcript": [
+    {
+      "speaker": "interviewer",
+      "text": "Hi, I’m Alex from TalentSift. This interview will be recorded and evaluated. Are you ready to begin?",
+      "timestamp": "2026-08-16T19:42:06.914378Z",
+      "item_id": "item_EDb26smy7BSyHsFyMlu40"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Yes.",
+      "timestamp": "2026-08-16T19:42:22.768146Z",
+      "item_id": "item_EDb2M9XdLtxYS9LvAgYSd"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "To get us started, could you briefly introduce yourself and tell me a little about your background?",
+      "timestamp": "2026-08-16T19:42:23.814105Z",
+      "item_id": "item_EDb2NedehxHeyDb0iaXzU"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Um, David, a Python backend developer, actually a full-stack developer but, you know, I know Python backend development. Development. Then I have three years experience in this work",
+      "timestamp": "2026-08-16T19:42:43.887897Z",
+      "item_id": "item_EDb2UfI1IjLkxlw9hlozy"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Tell me about a backend project you worked on. What did you build, and what was your role in it?",
+      "timestamp": "2026-08-16T19:42:44.925296Z",
+      "item_id": "item_EDb2ihv8JJjbg9Mel4Ghw"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Um, I works on a management system. It allows different users, different people in the state to communicate with the constituent responsible for local government of their household in packing waste from their household. So a platform where people can create their user account. Then they can register their household if they own an household. Yeah then also",
+      "timestamp": "2026-08-16T19:43:23.491209Z",
+      "item_id": "item_EDb2qJIwsLIoadaY6aDGV"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Um That's it Um okay also um I'm also on account register occupants directly. Um give create a user ID for an occupant who are not even created a user account yet. And the occupant will be able to activate the account when the pin, a certain pin sent to their own email for activation of the account. Yeah, and they can purchase bin that can be used in the house. And also communicate with the consultant. Yeah. And later improvement is service where they can pay for the waste being to be carried",
+      "timestamp": "2026-08-16T19:44:12.362953Z",
+      "item_id": "item_EDb3NZpJVJkesGMjnxjfF"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Alright. What’s one technical problem you ran into on that project, and how did you solve it?",
+      "timestamp": "2026-08-16T19:44:13.685330Z",
+      "item_id": "item_EDb49m8XnIT6zryqw0i2j"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Um, it was mostly um differentiating um okay differentiating output owner from occupant when the output owner is trying to manage the occupant. Like add occupant and the household owner not also appearing as an occupant. But I mean distinct role in that household. So only one person can have. So that's why I created household membership as a model. Then I created user model, household model. Then also, you know, if people are claiming different, they are trying to claim the same household. They can send a ownership",
+      "timestamp": "2026-08-16T19:45:06.330153Z",
+      "item_id": "item_EDb4HZOXOGcyEIP7eYUvo"
+    },
+    {
+      "speaker": "candidate",
+      "text": "From to the admin to the admin, review it. Yes",
+      "timestamp": "2026-08-16T19:45:12.577981Z",
+      "item_id": "item_EDb510GC9yUpfkzt26kni"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Nice, thanks. Why are you interested in Python backend development, and what keeps you motivated to work in this area?",
+      "timestamp": "2026-08-16T19:45:14.626040Z",
+      "item_id": "item_EDb57C8HRzzXGlnRnThFh"
+    },
+    {
+      "speaker": "candidate",
+      "text": "Problem solving. Like now, I solved the problem of the weather state waste management. Those are something that people see that, oh yeah, this is really help. Something they'll be interested in, something that will amaze them that, wow, this is possible. That was case me",
+      "timestamp": "2026-08-16T19:45:42.189207Z",
+      "item_id": "item_EDb5GlvIro2SQks1sjiAo"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Can you share a time you worked with others on a backend project and had to handle feedback or a disagreement? What did you personally do?",
+      "timestamp": "2026-08-16T19:45:44.021129Z",
+      "item_id": "item_EDb5bFGauUF9zWnXsqG8d"
+    },
+    {
+      "speaker": "candidate",
+      "text": "No, I created some issues on my GitHub because I didn't project because you know as a developer, you create issues on GitHub so that you can be solving each issue one by one. And yeah, there was one person that said an issue even though I was the head of the project. Someone suggested an issue. And I said that, okay, this issue would be really, you know what research about. I don't just jump and, okay, create the issue. I did my research first based on that issue. And I said that, okay, this thing can be implemented. And there was a time someone suggested something. I did my research. My research made us know that that thing will not be right for this particular project. You know, collaborating with different developers",
+      "timestamp": "2026-08-16T19:46:44.715230Z",
+      "item_id": "item_EDb5lIVMtF7SbCzDaCujZ"
+    },
+    {
+      "speaker": "interviewer",
+      "text": "Thank you for taking the time to speak today. We’ll review your responses and be in touch. The interview has now ended. Goodbye.",
+      "timestamp": "2026-08-16T19:46:47.843535Z",
+      "item_id": "item_EDb6dNd97fGkz1z4nds4l"
+    }
+  ]
+}

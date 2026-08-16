@@ -1,3 +1,14 @@
+from datetime import datetime, timezone
+# Needed when we mark the interview as completed.
+
+from models import Session, TranscriptTurn, utc_now
+# Import utc_now so we can record the exact completion time.
+# Session represents the whole interview.
+# TranscriptTurn represents one candidate/Alex turn.
+
+from storage import SessionRepo
+# SessionRepo handles saving/loading interview sessions.
+
 import asyncio, base64, json, os, queue
 import numpy as np
 import sounddevice as sd
@@ -10,7 +21,7 @@ from pathlib import Path  # Helps us build a reliable path to the prompt file.
 #Part 1: Connect and Configure
 load_dotenv()
 
-API_KEY = os.environ["OPENAI_API_KEY"]
+API_KEY = os.environ["OPENAI_API_KEY_MINE"]
 
 URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1" #Tells the websocket where to connect to
 HEADERS = {"Authorization" : f"Bearer {API_KEY}"} #For authorization via the API key if valid
@@ -33,7 +44,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PROMPT_FILE = BASE_DIR / "prompts" / "interviewer_prompt.txt"
 
 # The language selected for this interview session.
-LANGUAGE = "French"
+LANGUAGE = "English"
 
 
 # Read Alex's instruction template from the prompt file.
@@ -73,13 +84,18 @@ async def main():
                             "rate": MIC_RATE
                         },
                         "noise_reduction": {
-                            "type": "far_field"
+
+                            "type": "near_field"
                         },
+                        "transcription": {
+                            "model": "gpt-live-transcribe"
+                        },  # Convert the candidate's spoken audio into text during the interview.
+
                         "turn_detection": {
                                             "type": "server_vad",
                                             "threshold" : 0.7, #How loud counts as speech (0.0 - 1.0)
                                             "prefix_padding_ms": 300,  # audio kept from just BEFORE speech began
-                                            "silence_duration_ms" : 800, # how long a pause ends your turn
+                                            "silence_duration_ms" : 1000, # how long a pause ends your turn
 
                                             "create_response": True,
                                             "interrupt_response": True
@@ -96,9 +112,33 @@ async def main():
                     }
                 },
                 
-                "instructions": INSTRUCTIONS
+                "instructions": INSTRUCTIONS,
+                "tools": [
+    {
+        "type": "function",  # Tell Realtime that this is a function handled by our Python application.
+
+        "name": "finish_interview",  # This is the name Alex will call when the whole interview is finished.
+
+        "description": (
+            "Call this only after all required interview competencies "
+            "have been explored and the final closing has been given."
+        ),  # Helps Alex understand exactly when this function should be used.
+
+        "parameters": {
+            "type": "object",  # The function accepts an object of arguments.
+
+            "properties": {},  # We do not need any arguments to finish the interview.
+
+            "required": []
+        }
+    }
+],
+
+"tool_choice": "auto",
+# Allow Alex to decide when the finish_interview tool is appropriate.
             },
         }
+
         await ws.send(json.dumps(session_config)) #convert to json and wait till it sends
         print("✓ Session configured. Listening for events…") #Tells me on my terminal
 
@@ -123,17 +163,28 @@ def on_mic(indata, frames, t, status): #To receive every chunk audio from the mi
 
 
 async def send_mic(ws): #To continuously send microphone chunks to OpenAI
-    while True:
-        chunk = await asyncio.to_thread(mic_q.get) #To wait for a chunk in another thread 
-        audio_b64 = base64.b64encode(chunk).decode("utf-8") #converts the chunk to base64 then strings
-        event = {
-                    "type": "input_audio_buffer.append",
-                    "audio": audio_b64
-                    }
-            #client event for OpenAI to know this is another microphone audio chunk
+    try:
+        while True:
+            chunk = await asyncio.to_thread(mic_q.get) #To wait for a chunk in another thread 
+            audio_b64 = base64.b64encode(chunk).decode("utf-8") #converts the chunk to base64 then strings
+            event = {
+                        "type": "input_audio_buffer.append",
+                        "audio": audio_b64
+                        }
+                #client event for OpenAI to know this is another microphone audio chunk
 
-        await ws.send(json.dumps(event)) #convert to Json and send
+            await ws.send(json.dumps(event)) #convert to Json and send
 
+    except websockets.exceptions.ConnectionClosed as e:
+        # This runs if the WebSocket disappears while send_mic()
+        # is trying to send another microphone chunk.
+
+        print(
+            f"\n🎤 Microphone sender stopped because connection closed: {e}"
+        )
+
+        return
+        # End send_mic() cleanly instead of producing a large traceback.
 
 
 
@@ -259,6 +310,35 @@ async def receive(ws): #For receiving everything the AI sends back
     turn_ended_at = None # Intially nobody as finished speaking
     waiting_first_delta =False #To tell if we are cuurrently waiting for the A.I's first audio
     latencies = [] #Where we'd save all the mesauremnts
+    transcript_turns = []  # Store every completed candidate and interviewer turn for this interview.
+    repo = SessionRepo()
+    # Create our storage repository.
+    # This also makes the data/ folder if it does not exist.
+
+
+    session = Session(
+        job_id="junior-python-backend",
+        # TEMPORARY terminal-demo job ID.
+        # Later this will come from the real Job selected by the recruiter.
+
+        candidate_id="candidate-demo-001",
+        # TEMPORARY candidate ID.
+        # Later this will come from the real logged-in/registered candidate.
+
+        status="in_progress",
+        # The interview has started, so its state is now in progress.
+
+        language=LANGUAGE,
+        # Save the language selected for this exact session.
+
+        consent_given=True
+        # TEMPORARY for terminal testing.
+        # Later this MUST come from the candidate's actual consent action.
+    )
+
+    finishing_interview = False
+    # False = normal interview is still happening.
+    # True = Alex has finished asking questions and we are waiting for the final closing.
 
     try:
         async for raw in ws: #waiting for messages from the websocket
@@ -301,6 +381,9 @@ async def receive(ws): #For receiving everything the AI sends back
                             (item_id, chunk)
                         )  # Store BOTH the Alex message ID and audio together in the queue.
 
+
+
+
             elif etype == "input_audio_buffer.speech_started":  # VAD detected that the candidate has started speaking.
 
                 print(
@@ -330,7 +413,169 @@ async def receive(ws): #For receiving everything the AI sends back
                         "\r🎤 Normal candidate turn",
                         end=""
                     )  # This is ordinary conversation, so DO NOT abort, flush, or truncate Alex's previous question.
-                                
+
+
+
+            elif etype == "conversation.item.input_audio_transcription.completed":
+                # Get the completed candidate transcript.
+                candidate_text = event.get("transcript", "").strip()
+
+                # Ignore empty transcript events.
+                if candidate_text:
+
+                    session.transcript.append(
+                        TranscriptTurn(
+                            speaker="candidate",
+                            # The candidate said this turn.
+
+                            text=candidate_text,
+                            # Save what the transcription model heard.
+
+                            item_id=event.get("item_id")
+                            # Keep OpenAI's conversation item ID for traceability.
+                        )
+                    )
+
+                    repo.save(session)
+                    # Save the updated session immediately so transcript progress isn't lost.
+
+                    # Temporary evidence while we're testing.
+                    print(f"\n📝 Candidate: {candidate_text}")
+
+
+            elif etype == "response.output_audio_transcript.done":
+                # Get Alex's completed spoken transcript.
+                interviewer_text = event.get("transcript", "").strip()
+
+                # Ignore empty transcript events.
+                if interviewer_text:
+
+                    session.transcript.append(
+                        TranscriptTurn(
+                            speaker="interviewer",
+                            # Alex produced this turn.
+
+                            text=interviewer_text,
+                            # Save exactly what Alex said.
+
+                            item_id=event.get("item_id")
+                            # Keep the corresponding conversation item ID.
+                        )
+                    )
+
+                    # Show Alex's completed transcript while testing.
+                    print(f"\n📝 Alex: {interviewer_text}")
+
+
+                    completed_now = False
+                    # Normally this is just another interviewer turn.
+                    # We only change it to True when this particular turn
+                    # is the final closing.
+
+
+                    if finishing_interview:
+                        # finish_interview was already called,
+                        # so this transcript is Alex's final closing.
+
+                        session.status = "completed"
+                        # NOW the whole interview is actually finished.
+
+                        session.ended_at = utc_now()
+                        # Record the exact time Alex finished the closing.
+
+                        finishing_interview = False
+                        # Reset this so another Alex response cannot
+                        # accidentally complete the interview again.
+
+                        completed_now = True
+                        # Remember that THIS turn completed the interview.
+
+
+                    repo.save(session)
+                    # Save after every Alex turn.
+                    #
+                    # During the interview:
+                    #   status = "in_progress"
+                    #
+                    # On the final closing:
+                    #   status = "completed"
+                    #   ended_at = timestamp
+                    #
+                    # This also means the final closing itself is inside
+                    # the saved transcript before completion is persisted.
+
+
+                    if completed_now:
+                        print(
+                            f"\n✅ Interview completed and saved: {session.id}"
+                        )
+
+
+            elif etype == "response.function_call_arguments.done":
+                # The model has finished requesting one of our Python functions.
+
+                function_name = event.get("name")
+                # Find out which function Alex requested.
+
+
+                if function_name == "finish_interview":
+                    # Alex has decided that all required interview questions are finished.
+
+                    finishing_interview = True
+                    # IMPORTANT:
+                    # We are NOT marking the Session completed yet.
+                    # This only means we are entering the closing stage.
+
+
+                    call_id = event.get("call_id")
+                    # Every function call has an ID.
+                    # OpenAI uses this to connect our function result
+                    # back to the function Alex called.
+
+
+                    tool_result = {
+                        "type": "conversation.item.create",
+
+                        "item": {
+                            "type": "function_call_output",
+
+                            "call_id": call_id,
+                            # Tell OpenAI which finish_interview call
+                            # this result belongs to.
+
+                            "output": json.dumps({
+                                "status": "ready_to_close"
+                            })
+                            # Tell Alex that Python accepted the request
+                            # and he should now perform the final closing.
+                        }
+                    }
+
+
+                    await ws.send(json.dumps(tool_result))
+                    # Send our function result back to the Realtime conversation.
+
+
+                    closing_response = {
+                        "type": "response.create",
+
+                        "response": {
+                            "instructions": (
+                                "Deliver the final interview closing now. "
+                                "Thank the candidate briefly, tell them their responses "
+                                "will be reviewed, clearly state that the interview has ended, "
+                                "and say goodbye. "
+                                "Do not ask another question."
+                            )
+                        }
+                    }
+
+
+                    await ws.send(json.dumps(closing_response))
+                    # Explicitly ask the Realtime model to generate the closing response.
+
+                    print("\n🏁 Interview questions finished. Generating closing...")
+
             elif etype == "input_audio_buffer.speech_stopped":
                 turn_ended_at = time.monotonic()# start tehs top watch now
                 waiting_first_delta = True
