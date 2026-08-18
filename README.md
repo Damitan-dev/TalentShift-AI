@@ -12,3 +12,8 @@ real-time voice communication,AI assisted interviews, and professional software 
 -Git & Github
 -Websockets
 -asyncio
+
+
+### Run tests
+```bash
+pytest -v

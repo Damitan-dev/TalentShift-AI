@@ -3,14 +3,14 @@ import json
 from openai import OpenAI
 from pydantic import ValidationError
 
-from scoring.models import Scorecard
+from scoring.models import Scorecard,CompetencyScore
 
 
-client = OpenAI()
-# Creates the normal OpenAI API client.
-#
-# This is NOT Alex's Realtime WebSocket connection.
-# This client will make a normal request after an interview is finished.
+from dotenv import load_dotenv
+
+load_dotenv()
+# Load environment variables from .env
+# so OpenAI() can find OPENAI_API_KEY.
 
 
 MAX_EVALUATION_ATTEMPTS = 2
@@ -186,11 +186,61 @@ def score_transcript(
     candidate_transcript: str,
     rubric: dict
 ) -> Scorecard:
+    
+    # --------------------------------------------------
+    # SPECIAL CASE:
+    # There is no interview content to evaluate.
+    # --------------------------------------------------
 
-    # This remembers the most recent error.
-    # If both attempts fail, we can report WHY.
+    if not transcript.strip():
+        # Empty transcript means no competency could
+        # possibly have been explored.
+
+        scores = [
+            CompetencyScore(
+                name=competency_name,
+                score=1,
+                evidence=[],
+                justification="not explored"
+            )
+            for competency_name in rubric.keys()
+        ]
+
+
+        scorecard = Scorecard(
+            session_id=session_id,
+            scores=scores
+        )
+
+
+        weights = {
+            competency_name: details["weight"]
+            for competency_name, details in rubric.items()
+        }
+
+
+        scorecard.overall = scorecard.compute_overall(weights)
+
+        return scorecard
+        # IMPORTANT:
+        # "return" ends the function here.
+        #
+        # Therefore OpenAI is NEVER called
+        # for an empty transcript.
+
+
+    # --------------------------------------------------
+    # Only reach here when actual AI evaluation is needed.
+    # --------------------------------------------------
+
+    client = OpenAI()
+    # Now create the OpenAI client because
+    # we're actually about to use an LLM.
+
+
     last_error = None
 
+    # ...your retry loop continues here...
 
     for attempt in range(1, MAX_EVALUATION_ATTEMPTS + 1):
         # range(1, 3) gives us:
